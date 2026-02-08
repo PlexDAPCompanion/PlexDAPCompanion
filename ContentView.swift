@@ -45,6 +45,7 @@ struct ContentView: View {
     @State private var showReconciliationSheet = false
     @State private var currentImportingPlaylistName: String = ""
     @State private var currentImportingPaths: [String] = []
+    @StateObject private var authService = PlexAuthService.shared //logout button
     
     @AppStorage("serverPrefix") private var serverPrefix: String = "/Volumes/Plex/Music/"
     @AppStorage("dapPrefix") private var dapPrefix: String = "/Music/"
@@ -54,13 +55,29 @@ struct ContentView: View {
             // Header Settings Bar
             VStack(spacing: 16) {
                 HStack {
-                    Picker("Server", selection: $selectedServer) {
-                        Text("Select a Server").tag(nil as PlexResource?)
-                        ForEach(servers, id: \.name) { server in
-                            Text(server.name).tag(server as PlexResource?)
+                    HStack {
+                        Picker("Server", selection: $selectedServer) {
+                            Text("Select a Server").tag(nil as PlexResource?)
+                            ForEach(servers, id: \.name) { server in
+                                Text(server.name).tag(server as PlexResource?)
+                            }
                         }
+                        
+                        Button("Fetch") {
+                            Task { await loadPlaylists() }
+                        }
+                        .disabled(selectedServer == nil) // This grays out the button if no server is picked
+                        
+                        Divider().frame(height: 20).padding(.horizontal, 4) // Visual separator
+                        
+                        // The New Sign Out Button
+                        Button(action: { authService.logout() }) {
+                            Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Sign out of Plex and clear saved token")
                     }
-                    Button("Fetch") { Task { await loadPlaylists() } }
                 }
                 
                 VStack(alignment: .leading, spacing: 8) {
@@ -200,11 +217,13 @@ struct ContentView: View {
     
     // --- Core Logic ---
     
-    func setupInitialServers() {
+    func setupInitialServers() {   // Fetch resources through the service
         Task {
-            await PlexAuthService.shared.fetchResources()
+            await authService.fetchResources()
+            
+            // Sync the local state variables with the service results
             await MainActor.run {
-                self.servers = PlexAuthService.shared.servers
+                self.servers = authService.servers
                 self.selectedServer = self.servers.first
             }
         }
@@ -537,5 +556,31 @@ struct ExportLogSheet: View {
             }
         }
         .frame(minWidth: 700, minHeight: 450)
+    }
+}
+struct PlexLoginView: View {
+    @StateObject private var authService = PlexAuthService.shared
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "music.note.house.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.orange)
+            
+            Text("Plex DAP Companion")
+                .font(.title)
+                .bold()
+            
+            Text(authService.statusMessage)
+                .foregroundColor(.secondary)
+            
+            Button(action: { authService.connectToPlex() }) {
+                Text("Connect to Plex")
+                    .frame(width: 200)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+        }
+        .frame(width: 400, height: 300)
     }
 }

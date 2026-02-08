@@ -140,7 +140,24 @@ final class PlexAuthService: ObservableObject {
                 logout()
                 return // 
             }
-            
+            // MARK: - Sign Out Logic
+                
+                /// Clears all local session data and forces a return to the login screen.
+                func logout() {
+                    // 1. Remove the secret from the Mac's Keychain
+                    KeychainHelper.delete()
+                    
+                    // 2. Clear memory state
+                    self.authToken = nil
+                    self.isAuthenticated = false
+                    self.servers = []
+                    self.statusMessage = "Logged in as: None"
+                    
+                    // 3. Stop any background polling if it's running
+                    pollTask?.cancel()
+                    
+                    print("🧹 Security: User signed out and token purged.")
+                }
             // Successfully got data!
             let allResources = try JSONDecoder().decode([PlexResource].self, from: data)
             self.servers = allResources.filter { $0.provides.lowercased().contains("server") }
@@ -156,18 +173,19 @@ final class PlexAuthService: ObservableObject {
             }
             
         } catch {
-            if (error as NSError).code == NSURLErrorCancelled { return }
-            print("❌ Resource Fetch Error: \(error)")
-            statusMessage = "Error finding servers."
-        }
-    }
-    
-    func logout() {
-        KeychainHelper.delete()
-        self.authToken = nil
-        self.isAuthenticated = false
-        self.servers = []
-        self.statusMessage = "Please connect to Plex."
-        print("🧹 App state cleared and Keychain deleted.")
-    }
-}
+                    if (error as NSError).code == NSURLErrorCancelled { return }
+                    print("❌ Resource Fetch Error: \(error)")
+                    statusMessage = "Error finding servers."
+                }
+            } // This closes fetchResources
+
+            // ONLY have one logout function, right here at the bottom:
+            func logout() {
+                KeychainHelper.delete()
+                self.authToken = nil
+                self.isAuthenticated = false
+                self.servers = []
+                self.statusMessage = "Please connect to Plex."
+                print("🧹 App state cleared and Keychain deleted.")
+            }
+        } // This closes the whole Class
